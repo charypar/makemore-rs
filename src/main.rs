@@ -18,8 +18,12 @@ fn main() {
 
     let bigram_frequencies = count_bigrams(&names, &char_to_idx);
 
-    let mut bigram_probabilities = bigram_frequencies.to_kind(Kind::Float);
+    let mut bigram_probabilities = (bigram_frequencies + 1).to_kind(Kind::Float);
     bigram_probabilities /= bigram_probabilities.sum_dim_intlist([1].as_slice(), true, Kind::Float);
+
+    let nll = neg_log_likelihood(&bigram_probabilities, &names, &char_to_idx);
+
+    println!("Dataset negative log likelihood: {}", nll);
 
     for _ in 0..10 {
         let mut word = vec![];
@@ -36,6 +40,28 @@ fn main() {
 
         println!("{}", word.iter().collect::<String>());
     }
+}
+
+fn neg_log_likelihood(
+    bigram_probabilities: &Tensor,
+    names: &[String],
+    char_to_idx: &HashMap<char, i64>,
+) -> f64 {
+    let likelihoods = bigram_probabilities.log();
+
+    let mut ll = Tensor::zeros(&[1], (Kind::Float, Device::Cpu));
+    let mut n = Tensor::zeros(&[1], (Kind::Int64, Device::Cpu));
+
+    for name in names {
+        for (a, b) in word_to_bigrams(name) {
+            let (i, j) = (char_to_idx[&a], char_to_idx[&b]);
+
+            ll += likelihoods.i((i, j));
+            n += 1;
+        }
+    }
+
+    (-ll / n).into()
 }
 
 fn count_bigrams(names: &[String], char_to_idx: &HashMap<char, i64>) -> Tensor {
