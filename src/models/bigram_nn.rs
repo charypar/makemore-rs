@@ -69,26 +69,49 @@ impl BigramNet {
 
     // -> probabilities
     fn forward(&self, encoded_xs: &Tensor) -> Tensor {
-        // Linear layer
-        let logits = encoded_xs.to_kind(Kind::Float).matmul(&self.weights); // => predicted log-counts
+        // We choose to interpret the output as log(count), and because
+        // we train the network with that interpretation, it will become so
+        let logits = self.logits(encoded_xs);
 
         // Softmax layer - eqiv. exp, then divide by row-wise sum
+        // This normalises the rows to be probability distribution of next letter
         logits.softmax(1, Kind::Float)
     }
 
-    // Run a forward pass and calculate a loss
+    // Calculate a loss against known ys
     pub fn loss(&self, xs: &Tensor, ys: &Tensor) -> Tensor {
-        let dataset_size = xs.size();
-        let indexes = Tensor::arange(dataset_size[0], (Kind::Int64, self.device));
+        // cross entropy below is equivalent to
+        // logits -> softmax (= exp -> normalise row-wise) -> select probs for Ys -> log -> mean
+        //
+        // in code:
+        //
+        // let dataset_size = xs.size();
+        // let indexes = Tensor::arange(dataset_size[0], (Kind::Int64, self.device)); // => 0..N
+        //
+        // let log_probs = xs // one-hot encoded
+        //     .to_kind(Kind::Float)
+        //     .matmul(&self.weights) // => logits
+        //     .softmax(1, Kind::Float) // => probs
+        //     .log() // log-probs
+        //     .index(&[Some(&indexes), Some(ys)]); // selected for targets
+        //
+        // assert_eq!(log_probs.size(), [dataset_size[0]]); // sanity check
+        // -log_probs.mean(Kind::Float); // is negative log-likelihood
 
-        let probs = self.forward(xs);
-
-        let log_probs = probs.index(&[Some(&indexes), Some(ys)]).log();
-        assert_eq!(log_probs.size(), [dataset_size[0]]);
-
-        -log_probs.mean(Kind::Float)
+        // cross_entropy_for_logits is log_softmax, then nll_loss
+        // does the same as above
+        self.logits(xs).cross_entropy_for_logits(ys)
     }
 
+    // Applies the linear layer of the network (just matrix multiplication)
+    // This is the core of the model.
+    //
+    // => predicted log-counts ~ "logits"
+    fn logits(&self, encoded_xs: &Tensor) -> Tensor {
+        encoded_xs.to_kind(Kind::Float).matmul(&self.weights)
+    }
+
+    // Prepare a dataset based on the known words
     pub fn dataset(&self, words: &[String], coder: &Coder) -> (Tensor, Tensor) {
         let (xs, ys): (Vec<i64>, Vec<i64>) = words
             .iter()
