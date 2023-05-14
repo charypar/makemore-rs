@@ -57,8 +57,8 @@ impl BigramDirect {
         let freqs = Tensor::ones(&[27, 27], (Kind::Int64, self.device));
 
         for words in words {
-            for (a, b) in Self::word_to_bigrams(words) {
-                let (i, j) = (coder.to_i(a), coder.to_i(b));
+            for bigram in Self::word_to_bigrams(words) {
+                let (i, j) = (coder.to_i(bigram.0), coder.to_i(bigram.1));
 
                 let mut count = freqs.i((i, j));
                 count += 1;
@@ -80,8 +80,8 @@ impl BigramDirect {
         let mut n = Tensor::zeros(&[1], (Kind::Int64, self.device));
 
         for word in words {
-            for (a, b) in Self::word_to_bigrams(word) {
-                let (i, j) = (coder.to_i(a), coder.to_i(b));
+            for bigram in Self::word_to_bigrams(word) {
+                let (i, j) = (coder.to_i(bigram.0), coder.to_i(bigram.1));
 
                 ll += likelihoods.i((i, j));
                 n += 1;
@@ -138,8 +138,6 @@ impl BigramNet {
         let (xs, ys) = self.dataset(words, coder);
 
         println!("Training on {} examples...", &xs.size()[0]);
-
-        let ys = ys;
 
         for k in 0..n_steps {
             let loss = self.loss(&xs, &ys);
@@ -200,13 +198,10 @@ impl BigramNet {
 
         let probs = self.forward(xs);
 
-        let log_probs = -probs.index(&[Some(&indexes), Some(ys)]).log();
+        let log_probs = probs.index(&[Some(&indexes), Some(ys)]).log();
         assert_eq!(log_probs.size(), [dataset_size[0]]);
 
-        -probs
-            .index(&[Some(&indexes), Some(ys)])
-            .log()
-            .mean(Kind::Float)
+        -log_probs.mean(Kind::Float)
     }
 
     fn dataset(&self, words: &[String], coder: &Coder) -> (Tensor, Tensor) {
