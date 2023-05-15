@@ -9,8 +9,8 @@ use std::{
 use tch::Device;
 
 use coder::Coder;
-use models::BigramDirect;
 use models::BigramNet;
+use models::{BigramDirect, NgramNet};
 
 fn main() {
     let device = Device::Cpu;
@@ -23,13 +23,29 @@ fn main() {
 
     let coder = Coder::new(&names.join("."));
 
+    // bigram_models(device, names, coder);
+
+    let mut ngram: NgramNet<3, 2, 100> = NgramNet::new(device, coder);
+
+    let (xs, ys) = ngram.dataset(&names);
+
+    ngram.train(&xs, &ys, 300);
+    println!("\n");
+
+    for word in ngram.sample(10) {
+        println!("{word}");
+    }
+}
+
+#[allow(dead_code)]
+fn bigram_models(device: Device, names: Vec<String>, coder: Coder) {
     // Make and train models
 
     let mut direct = BigramDirect::new(device);
     direct.train(&names, &coder);
 
     let mut neural_net = BigramNet::new(device);
-    neural_net.train(&names, 300, &coder);
+    neural_net.train(&names, 250, &coder);
 
     // Print achieved losses
 
